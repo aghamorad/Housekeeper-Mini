@@ -415,7 +415,7 @@ object NetworkAndUpdateEngine {
         }
     }
 
-    private fun isNewerVersion(remote: String, local: String): Boolean {
+    internal fun isNewerVersion(remote: String, local: String): Boolean {
         val r = remote.split(".").map { it.toIntOrNull() ?: 0 }
         val l = local.split(".").map { it.toIntOrNull() ?: 0 }
         val max = maxOf(r.size, l.size)

@@ -31,6 +31,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -373,6 +374,21 @@ fun AppsScreen(
     onBackupApk: (com.morad.housekeepermini.model.AppEntry) -> Unit
 ) {
     val context = LocalContext.current
+    var searchQuery by remember { mutableStateOf("") }
+    var unusedOnly by remember { mutableStateOf(false) }
+
+    val thirtyDaysMs = 30L * 24L * 60L * 60L * 1000L
+    val now = remember(state.apps) { System.currentTimeMillis() }
+    val filteredApps = remember(state.apps, searchQuery, unusedOnly) {
+        state.apps.filter { app ->
+            val matchesQuery = searchQuery.isBlank() ||
+                app.label.contains(searchQuery, ignoreCase = true) ||
+                app.packageName.contains(searchQuery, ignoreCase = true)
+            val matchesUnused = !unusedOnly ||
+                (app.lastUsedMs > 0L && (now - app.lastUsedMs) >= thirtyDaysMs)
+            matchesQuery && matchesUnused
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -404,7 +420,7 @@ fun AppsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "Installed Apps (${state.apps.size})",
+                    "Installed Apps (${filteredApps.size})",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -414,9 +430,32 @@ fun AppsScreen(
                     Text("Refresh")
                 }
             }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search apps") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (state.hasUsageAccess) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !unusedOnly,
+                        onClick = { unusedOnly = false },
+                        label = { Text("All") }
+                    )
+                    FilterChip(
+                        selected = unusedOnly,
+                        onClick = { unusedOnly = true },
+                        label = { Text("Unused 30d+") }
+                    )
+                }
+            }
         }
 
-        items(state.apps, key = { it.packageName }) { app ->
+        items(filteredApps, key = { it.packageName }) { app ->
             Card {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -643,77 +682,46 @@ fun NetworkScreen(
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
                 Column(modifier = Modifier.padding(20.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Updates & About", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("App & Self-Updater", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Housekeeper Mini v${BuildConfig.VERSION_NAME} • Made by Morad",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { showAddRepoDialog = true }) {
+                                Text("+ Add")
+                            }
+                            FilledTonalButton(onClick = onCheckAllTrackedApps, enabled = !state.isCheckingTrackedApps) {
+                                Text(if (state.isCheckingTrackedApps) "Checking…" else "Check All")
+                            }
+                        }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("Housekeeper Mini v${BuildConfig.VERSION_NAME} • Made by Morad")
-                    Spacer(modifier = Modifier.height(12.dp))
 
                     when (val u = state.updateState) {
-                        UpdateState.Idle -> {
-                            FilledTonalButton(onClick = onCheckUpdates) {
-                                Text("Check for Updates")
-                            }
-                        }
-                        UpdateState.Checking -> {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.height(20.dp).width(20.dp))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("Checking GitHub releases…")
-                            }
-                        }
-                        is UpdateState.UpToDate -> {
-                            Text("You’re on the latest version (v${u.currentVersion}).")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(onClick = onCheckUpdates) { Text("Check Again") }
-                        }
-                        is UpdateState.Available -> {
-                            Text("Version ${u.version} is available!", fontWeight = FontWeight.SemiBold)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(u.notes, style = MaterialTheme.typography.bodySmall)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(onClick = { onInstallUpdate(u.apkUrl) }) {
-                                Text("Download & Install v${u.version}")
-                            }
-                        }
                         is UpdateState.Downloading -> {
+                            Spacer(modifier = Modifier.height(10.dp))
                             LinearProgressIndicator(progress = { u.progress / 100f }, modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text("Downloading update… ${u.progress}%")
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Downloading APK… ${u.progress}%", style = MaterialTheme.typography.bodySmall)
                         }
                         is UpdateState.Error -> {
-                            Text(u.message, color = MaterialTheme.colorScheme.error)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(onClick = onCheckUpdates) { Text("Retry") }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(u.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         }
-                    }
-                }
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("GitHub App Updater", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Track & install APK releases from GitHub repos.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showAddRepoDialog = true }) {
-                        Text("+ Add")
-                    }
-                    FilledTonalButton(onClick = onCheckAllTrackedApps, enabled = !state.isCheckingTrackedApps) {
-                        Text(if (state.isCheckingTrackedApps) "Checking…" else "Check All")
+                        else -> Unit
                     }
                 }
             }

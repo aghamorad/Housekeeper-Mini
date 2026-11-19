@@ -2,7 +2,9 @@ package com.morad.housekeepermini
 
 import com.morad.housekeepermini.engine.NetworkAndUpdateEngine
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NetworkAndUpdateEngineTest {
@@ -19,5 +21,13 @@ class NetworkAndUpdateEngineTest {
             NetworkAndUpdateEngine.parseGitHubRepo("https://github.com/aghamorad/Housekeeper-Mini/")
         )
         assertNull(NetworkAndUpdateEngine.parseGitHubRepo("not-a-repo"))
+    }
+
+    @Test
+    fun isNewerVersion_comparesSemverSegments() {
+        assertTrue(NetworkAndUpdateEngine.isNewerVersion("0.2.0", "0.1.0"))
+        assertTrue(NetworkAndUpdateEngine.isNewerVersion("1.0.0", "0.9.9"))
+        assertFalse(NetworkAndUpdateEngine.isNewerVersion("0.1.0", "0.1.0"))
+        assertFalse(NetworkAndUpdateEngine.isNewerVersion("0.1.0", "0.2.0"))
     }
 }

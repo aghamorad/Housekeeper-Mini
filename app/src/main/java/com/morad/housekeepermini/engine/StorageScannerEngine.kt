@@ -55,6 +55,11 @@ object StorageScannerEngine {
 
     fun scan(): List<StorageItem> {
         val root = Environment.getExternalStorageDirectory() ?: return emptyList()
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        return scanDirectory(root, downloadsDir)
+    }
+
+    internal fun scanDirectory(root: File, downloadsDir: File? = null): List<StorageItem> {
         if (!root.exists() || !root.canRead()) return emptyList()
 
         val apks = mutableListOf<StorageItem>()
@@ -64,8 +69,14 @@ object StorageScannerEngine {
 
         val now = System.currentTimeMillis()
         val oldCutoff = now - TimeUnit.DAYS.toMillis(OLD_DOWNLOAD_DAYS)
-        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val downloadsPrefix = downloadsDir?.absolutePath ?: ""
+        val rootPath = root.absolutePath
+
+        fun relativeParent(file: File): String {
+            val parent = file.parentFile?.absolutePath ?: return "Storage"
+            val rel = parent.removePrefix(rootPath).trimStart('/')
+            return rel.ifEmpty { "Internal Storage" }
+        }
 
         walkSafe(root, depth = 0, maxDepth = 6) { file ->
             val len = file.length()
@@ -82,7 +93,7 @@ object StorageScannerEngine {
                         sizeBytes = len,
                         modifiedMs = mod,
                         category = StorageCategory.APK,
-                        detail = file.parentFile?.name ?: "Storage"
+                        detail = relativeParent(file)
                     )
                 )
             }
@@ -95,7 +106,7 @@ object StorageScannerEngine {
                         sizeBytes = len,
                         modifiedMs = mod,
                         category = StorageCategory.LARGE,
-                        detail = file.parentFile?.name ?: "Storage"
+                        detail = relativeParent(file)
                     )
                 )
             }
@@ -113,7 +124,7 @@ object StorageScannerEngine {
                         sizeBytes = len,
                         modifiedMs = mod,
                         category = StorageCategory.OLD_DOWNLOAD,
-                        detail = "Untouched for $days days"
+                        detail = "Untouched for $days days • ${relativeParent(file)}"
                     )
                 )
             }
@@ -144,7 +155,7 @@ object StorageScannerEngine {
                             sizeBytes = size,
                             modifiedMs = dup.lastModified(),
                             category = StorageCategory.DUPLICATE,
-                            detail = "Copy of $originalName"
+                            detail = "Copy of $originalName • ${relativeParent(dup)}"
                         )
                     )
                 }
