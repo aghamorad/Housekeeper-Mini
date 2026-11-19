@@ -772,7 +772,6 @@ fun NetworkScreen(
                     "MediaDock9 — macOS" to "https://github.com/aghamorad/MediaDock9",
                     "Virastar — Web, macOS & iOS" to "https://github.com/aghamorad/virastar",
                     "Jeopardy (Iranian Edition) — Web, macOS, iOS & Android" to "https://github.com/aghamorad/jeopardy-iranian-edition",
-                    "RANT — macOS, Windows & Linux" to "https://github.com/aghamorad/rant-game",
                     "RaveBSD — macOS" to "https://github.com/aghamorad/RaveBSD-Mac"
                 )
             }
