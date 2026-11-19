@@ -771,8 +771,7 @@ fun NetworkScreen(
                     "RouteSweep — macOS" to "https://github.com/aghamorad/routesweep",
                     "MediaDock9 — macOS" to "https://github.com/aghamorad/MediaDock9",
                     "Virastar — Web, macOS & iOS" to "https://github.com/aghamorad/virastar",
-                    "Jeopardy (Iranian Edition) — Web, macOS, iOS & Android" to "https://github.com/aghamorad/jeopardy-iranian-edition",
-                    "RaveBSD — macOS" to "https://github.com/aghamorad/RaveBSD-Mac"
+                    "Jeopardy (Iranian Edition) — Web, macOS, iOS & Android" to "https://github.com/aghamorad/jeopardy-iranian-edition"
                 )
             }
             Card {
