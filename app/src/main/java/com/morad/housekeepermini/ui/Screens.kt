@@ -766,14 +766,14 @@ fun NetworkScreen(
             val uriHandler = LocalUriHandler.current
             val otherApps = remember {
                 listOf(
-                    "Housekeeper (macOS Mother App)" to "https://github.com/aghamorad/Housekeeper",
-                    "Bookbind (Book Typesetter)" to "https://github.com/aghamorad/bookbind",
-                    "RouteSweep (VPN & Route Tester)" to "https://github.com/aghamorad/routesweep",
-                    "MediaDock9 (Media Downloader)" to "https://github.com/aghamorad/MediaDock9",
-                    "Virastar (Persian Editor)" to "https://github.com/aghamorad/virastar",
-                    "Jeopardy — Iranian Edition" to "https://github.com/aghamorad/jeopardy-iranian-edition",
-                    "RANT (Game)" to "https://github.com/aghamorad/rant-game",
-                    "RaveBSD (Mac)" to "https://github.com/aghamorad/RaveBSD-Mac"
+                    "Housekeeper — macOS" to "https://github.com/aghamorad/Housekeeper",
+                    "Bookbind — macOS & Web" to "https://github.com/aghamorad/bookbind",
+                    "RouteSweep — macOS" to "https://github.com/aghamorad/routesweep",
+                    "MediaDock9 — macOS" to "https://github.com/aghamorad/MediaDock9",
+                    "Virastar — Web, macOS & iOS" to "https://github.com/aghamorad/virastar",
+                    "Jeopardy (Iranian Edition) — Web, macOS, iOS & Android" to "https://github.com/aghamorad/jeopardy-iranian-edition",
+                    "RANT — macOS, Windows & Linux" to "https://github.com/aghamorad/rant-game",
+                    "RaveBSD — macOS" to "https://github.com/aghamorad/RaveBSD-Mac"
                 )
             }
             Card {
