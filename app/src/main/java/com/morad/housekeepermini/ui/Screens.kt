@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.morad.housekeepermini.BuildConfig
@@ -755,6 +756,47 @@ fun NetworkScreen(
                                     Text("Remove", color = MaterialTheme.colorScheme.error)
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            val uriHandler = LocalUriHandler.current
+            val otherApps = remember {
+                listOf(
+                    "Housekeeper (macOS Mother App)" to "https://github.com/aghamorad/Housekeeper",
+                    "Bookbind (Book Typesetter)" to "https://github.com/aghamorad/bookbind",
+                    "RouteSweep (VPN & Route Tester)" to "https://github.com/aghamorad/routesweep",
+                    "MediaDock9 (Media Downloader)" to "https://github.com/aghamorad/MediaDock9",
+                    "Virastar (Persian Editor)" to "https://github.com/aghamorad/virastar",
+                    "Jeopardy — Iranian Edition" to "https://github.com/aghamorad/jeopardy-iranian-edition",
+                    "RANT (Game)" to "https://github.com/aghamorad/rant-game",
+                    "RaveBSD (Mac)" to "https://github.com/aghamorad/RaveBSD-Mac"
+                )
+            }
+            Card {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("More Apps by Morad", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Explore our other open-source apps on GitHub.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    for ((label, url) in otherApps) {
+                        TextButton(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri(url)
+                                } catch (_: Exception) {
+                                    // Safe on devices without a browser intent handler
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(label)
                         }
                     }
                 }
