@@ -1,10 +1,13 @@
 package com.morad.housekeepermini.engine
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.morad.housekeepermini.BuildConfig
 import com.morad.housekeepermini.model.RouteProbeResult
@@ -216,13 +219,31 @@ object NetworkAndUpdateEngine {
                 "${context.packageName}.fileprovider",
                 apkFile
             )
+
+            if (!context.packageManager.canRequestPackageInstalls()) {
+                val permIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    context.startActivity(permIntent)
+                } catch (_: ActivityNotFoundException) {
+                    // Fallback on Quest / stripped Android
+                }
+                return "Allow 'Install unknown apps' for Housekeeper Mini, then tap Install again."
+            }
+
             val installIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(installIntent)
-            null
+            try {
+                context.startActivity(installIntent)
+                null
+            } catch (_: ActivityNotFoundException) {
+                "No package installer found on this device."
+            }
         } catch (e: Exception) {
             e.localizedMessage ?: "Download failed"
         }

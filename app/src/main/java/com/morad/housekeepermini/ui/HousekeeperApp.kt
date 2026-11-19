@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.morad.housekeepermini.model.NavTab
@@ -38,6 +40,10 @@ import com.morad.housekeepermini.model.NavTab
 fun HousekeeperApp(vm: HousekeeperViewModel = viewModel()) {
     val state by vm.ui.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.refreshVitals()
+    }
 
     LaunchedEffect(state.statusBanner) {
         val msg = state.statusBanner ?: return@LaunchedEffect
