@@ -1,0 +1,301 @@
+package com.morad.housekeepermini.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.morad.housekeepermini.engine.AppsAndPrivacyEngine
+import com.morad.housekeepermini.engine.DeviceVitalsEngine
+import com.morad.housekeepermini.engine.NetworkAndUpdateEngine
+import com.morad.housekeepermini.engine.NetworkSummary
+import com.morad.housekeepermini.engine.StorageScannerEngine
+import com.morad.housekeepermini.model.AppEntry
+import com.morad.housekeepermini.model.DeviceVitals
+import com.morad.housekeepermini.model.NavTab
+import com.morad.housekeepermini.model.PrivacyFinding
+import com.morad.housekeepermini.model.RouteProbeResult
+import com.morad.housekeepermini.model.StorageCategory
+import com.morad.housekeepermini.model.StorageItem
+import com.morad.housekeepermini.model.TrackedRepoApp
+import com.morad.housekeepermini.model.UpdateState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class HousekeeperUiState(
+    val selectedTab: NavTab = NavTab.OVERVIEW,
+    val vitals: DeviceVitals = DeviceVitals(),
+    val hasFullStorageAccess: Boolean = false,
+    val hasUsageAccess: Boolean = false,
+    val isScanningStorage: Boolean = false,
+    val storageItems: List<StorageItem> = emptyList(),
+    val selectedPaths: Set<String> = emptySet(),
+    val isScanningApps: Boolean = false,
+    val apps: List<AppEntry> = emptyList(),
+    val privacyFindings: List<PrivacyFinding> = emptyList(),
+    val networkSummary: NetworkSummary = NetworkSummary(false, "Checking…", "—", "—"),
+    val customLanHost: String = "192.168.1.81:8081",
+    val isProbingRoutes: Boolean = false,
+    val routeResults: List<RouteProbeResult> = emptyList(),
+    val updateState: UpdateState = UpdateState.Idle,
+    val trackedApps: List<TrackedRepoApp> = emptyList(),
+    val isCheckingTrackedApps: Boolean = false,
+    val statusBanner: String? = null
+)
+
+class HousekeeperViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val _ui = MutableStateFlow(HousekeeperUiState())
+    val ui: StateFlow<HousekeeperUiState> = _ui.asStateFlow()
+
+    init {
+        refreshAll()
+    }
+
+    fun selectTab(tab: NavTab) {
+        _ui.update { it.copy(selectedTab = tab, statusBanner = null) }
+    }
+
+    fun clearBanner() {
+        _ui.update { it.copy(statusBanner = null) }
+    }
+
+    fun refreshAll() {
+        val ctx = getApplication<Application>()
+        _ui.update { it.copy(trackedApps = NetworkAndUpdateEngine.loadTrackedApps(ctx)) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val vitals = DeviceVitalsEngine.read(ctx)
+            val fullStorage = StorageScannerEngine.hasFullStorageAccess()
+            val usageAccess = AppsAndPrivacyEngine.hasUsageAccess(ctx)
+            val net = NetworkAndUpdateEngine.readNetworkSummary(ctx)
+            _ui.update {
+                it.copy(
+                    vitals = vitals,
+                    hasFullStorageAccess = fullStorage,
+                    hasUsageAccess = usageAccess,
+                    networkSummary = net
+                )
+            }
+        }
+        scanStorage()
+        scanApps()
+    }
+
+    fun refreshVitals() {
+        val ctx = getApplication<Application>()
+        _ui.update { it.copy(trackedApps = NetworkAndUpdateEngine.loadTrackedApps(ctx)) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val vitals = DeviceVitalsEngine.read(ctx)
+            val fullStorage = StorageScannerEngine.hasFullStorageAccess()
+            val usageAccess = AppsAndPrivacyEngine.hasUsageAccess(ctx)
+            val net = NetworkAndUpdateEngine.readNetworkSummary(ctx)
+            _ui.update {
+                it.copy(
+                    vitals = vitals,
+                    hasFullStorageAccess = fullStorage,
+                    hasUsageAccess = usageAccess,
+                    networkSummary = net
+                )
+            }
+        }
+    }
+
+    fun scanStorage() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(isScanningStorage = true) }
+            val items = StorageScannerEngine.scan()
+            val fullStorage = StorageScannerEngine.hasFullStorageAccess()
+            _ui.update {
+                it.copy(
+                    isScanningStorage = false,
+                    hasFullStorageAccess = fullStorage,
+                    storageItems = items,
+                    selectedPaths = emptySet()
+                )
+            }
+        }
+    }
+
+    fun togglePathSelection(path: String) {
+        _ui.update { state ->
+            val next = state.selectedPaths.toMutableSet()
+            if (!next.add(path)) next.remove(path)
+            state.copy(selectedPaths = next)
+        }
+    }
+
+    fun selectSafeLeftovers() {
+        _ui.update { state ->
+            val safe = state.storageItems
+                .filter {
+                    it.category == StorageCategory.APK ||
+                        it.category == StorageCategory.DUPLICATE
+                }
+                .map { it.path }
+                .toSet()
+            state.copy(
+                selectedPaths = safe,
+                statusBanner = if (safe.isEmpty()) "No leftover APKs or duplicates found." else "Selected ${safe.size} safe leftovers."
+            )
+        }
+    }
+
+    fun clearStorageSelection() {
+        _ui.update { it.copy(selectedPaths = emptySet()) }
+    }
+
+    fun deleteSelectedStorageItems() {
+        val paths = _ui.value.selectedPaths
+        if (paths.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = StorageScannerEngine.deleteItems(paths)
+            val items = StorageScannerEngine.scan()
+            val vitals = DeviceVitalsEngine.read(getApplication())
+            _ui.update {
+                it.copy(
+                    storageItems = items,
+                    selectedPaths = emptySet(),
+                    vitals = vitals,
+                    statusBanner = "Removed $count item(s)."
+                )
+            }
+        }
+    }
+
+    fun scanApps() {
+        val ctx = getApplication<Application>()
+        _ui.update { it.copy(trackedApps = NetworkAndUpdateEngine.loadTrackedApps(ctx)) }
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(isScanningApps = true) }
+            val (apps, privacy) = AppsAndPrivacyEngine.scanApps(ctx)
+            val usageAccess = AppsAndPrivacyEngine.hasUsageAccess(ctx)
+            _ui.update {
+                it.copy(
+                    isScanningApps = false,
+                    hasUsageAccess = usageAccess,
+                    apps = apps,
+                    privacyFindings = privacy
+                )
+            }
+        }
+    }
+
+    fun backupApk(entry: AppEntry) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val path = AppsAndPrivacyEngine.backupApk(entry)
+            _ui.update {
+                it.copy(
+                    statusBanner = if (path != null) {
+                        "Saved ${entry.label} APK to Downloads/HousekeeperMini-Backups."
+                    } else {
+                        "Could not copy ${entry.label} APK (check storage permission)."
+                    }
+                )
+            }
+        }
+    }
+
+    fun setCustomLanHost(value: String) {
+        _ui.update { it.copy(customLanHost = value) }
+    }
+
+    fun runRouteSweep() {
+        val host = _ui.value.customLanHost
+        val ctx = getApplication<Application>()
+        _ui.update { it.copy(trackedApps = NetworkAndUpdateEngine.loadTrackedApps(ctx)) }
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(isProbingRoutes = true) }
+            val summary = NetworkAndUpdateEngine.readNetworkSummary(ctx)
+            val results = NetworkAndUpdateEngine.runRouteSweep(host)
+            _ui.update {
+                it.copy(
+                    isProbingRoutes = false,
+                    networkSummary = summary,
+                    routeResults = results
+                )
+            }
+        }
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(updateState = UpdateState.Checking) }
+            val result = NetworkAndUpdateEngine.checkForUpdate()
+            _ui.update { it.copy(updateState = result) }
+        }
+    }
+
+    fun installUpdate(apkUrl: String) {
+        val ctx = getApplication<Application>()
+        _ui.update { it.copy(trackedApps = NetworkAndUpdateEngine.loadTrackedApps(ctx)) }
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(updateState = UpdateState.Downloading(0)) }
+            val err = NetworkAndUpdateEngine.downloadAndInstallApk(ctx, apkUrl) { pct ->
+                _ui.update { it.copy(updateState = UpdateState.Downloading(pct)) }
+            }
+            if (err != null) {
+                _ui.update { it.copy(updateState = UpdateState.Error(err)) }
+            } else {
+                _ui.update { it.copy(updateState = UpdateState.Idle) }
+            }
+        }
+    }
+
+    fun addTrackedApp(repoInput: String, packageNameInput: String) {
+        val repo = NetworkAndUpdateEngine.parseGitHubRepo(repoInput)
+        if (repo == null) {
+            _ui.update { it.copy(statusBanner = "Enter a valid GitHub repo like owner/repo or https://github.com/owner/repo.") }
+            return
+        }
+        val ctx = getApplication<Application>()
+        val current = _ui.value.trackedApps
+        if (current.any { it.repo.equals(repo, ignoreCase = true) }) {
+            _ui.update { it.copy(statusBanner = "$repo is already in your list.") }
+            return
+        }
+        val added = TrackedRepoApp(
+            repo = repo,
+            displayName = repo.substringAfter("/"),
+            packageName = packageNameInput.trim(),
+            statusText = "Checking…"
+        )
+        val updatedList = current + added
+        NetworkAndUpdateEngine.saveTrackedApps(ctx, updatedList)
+        _ui.update { it.copy(trackedApps = updatedList, statusBanner = "Added $repo") }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val checked = NetworkAndUpdateEngine.checkTrackedApp(ctx, added)
+            _ui.update { state ->
+                state.copy(
+                    trackedApps = state.trackedApps.map {
+                        if (it.repo.equals(repo, ignoreCase = true)) checked else it
+                    }
+                )
+            }
+        }
+    }
+
+    fun removeTrackedApp(repo: String) {
+        val ctx = getApplication<Application>()
+        val next = _ui.value.trackedApps.filterNot { !it.isBuiltIn && it.repo.equals(repo, ignoreCase = true) }
+        NetworkAndUpdateEngine.saveTrackedApps(ctx, next)
+        _ui.update { it.copy(trackedApps = next) }
+    }
+
+    fun checkAllTrackedApps() {
+        val ctx = getApplication<Application>()
+        val snapshot = _ui.value.trackedApps
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(isCheckingTrackedApps = true) }
+            val refreshed = snapshot.map { NetworkAndUpdateEngine.checkTrackedApp(ctx, it) }
+            _ui.update {
+                it.copy(
+                    isCheckingTrackedApps = false,
+                    trackedApps = refreshed
+                )
+            }
+        }
+    }
+}
