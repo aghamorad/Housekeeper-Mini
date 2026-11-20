@@ -7,41 +7,42 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val TealPrimary = Color(0xFF0E7490)
-private val TealLight = Color(0xFF38BDF8)
-private val TealContainerLight = Color(0xFFE0F2FE)
-private val TealContainerDark = Color(0xFF0C4A6E)
+// Housekeeper Signature Burgundy & Warm Parchment Palette
+private val BurgundyPrimaryLight = Color(0xFF9E2F27)
+private val BurgundyAccentDark = Color(0xFFEAB19E)
+private val BurgundyContainerLight = Color(0xFFEFE5E0)
+private val BurgundyContainerDark = Color(0xFF97393A)
 
 private val LightColors = lightColorScheme(
-    primary = TealPrimary,
+    primary = BurgundyPrimaryLight,
     onPrimary = Color.White,
-    primaryContainer = TealContainerLight,
-    onPrimaryContainer = Color(0xFF082F49),
-    secondary = Color(0xFF0F766E),
+    primaryContainer = BurgundyContainerLight,
+    onPrimaryContainer = Color(0xFF280705),
+    secondary = Color(0xFF166C36),
     onSecondary = Color.White,
-    background = Color(0xFFF8FAFC),
-    onBackground = Color(0xFF0F172A),
-    surface = Color.White,
-    onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = Color(0xFF475569),
+    background = Color(0xFFF9F4F1),
+    onBackground = Color(0xFF260C10),
+    surface = Color(0xFFFFFCFA),
+    onSurface = Color(0xFF260C10),
+    surfaceVariant = Color(0xFFF0E4DF),
+    onSurfaceVariant = Color(0xFF6B4A45),
     error = Color(0xFFB91C1C)
 )
 
 private val DarkColors = darkColorScheme(
-    primary = TealLight,
-    onPrimary = Color(0xFF082F49),
-    primaryContainer = TealContainerDark,
-    onPrimaryContainer = Color(0xFFE0F2FE),
-    secondary = Color(0xFF2DD4BF),
-    onSecondary = Color(0xFF042F2E),
-    background = Color(0xFF0B1120),
-    onBackground = Color(0xFFF1F5F9),
-    surface = Color(0xFF111827),
-    onSurface = Color(0xFFF1F5F9),
-    surfaceVariant = Color(0xFF1E293B),
-    onSurfaceVariant = Color(0xFF94A3B8),
-    error = Color(0xFFF87171)
+    primary = BurgundyAccentDark,
+    onPrimary = Color(0xFF280705),
+    primaryContainer = BurgundyContainerDark,
+    onPrimaryContainer = Color(0xFFF9F4F1),
+    secondary = Color(0xFF6FC798),
+    onSecondary = Color(0xFF062E19),
+    background = Color(0xFF260C10),
+    onBackground = Color(0xFFF2E4E1),
+    surface = Color(0xFF331D21),
+    onSurface = Color(0xFFF2E4E1),
+    surfaceVariant = Color(0xFF402529),
+    onSurfaceVariant = Color(0xFFC9A49D),
+    error = Color(0xFFFF6C56)
 )
 
 @Composable

@@ -78,6 +78,33 @@ data class RouteProbeResult(
     val detail: String
 )
 
+data class SpeedTestResult(
+    val downloadMbps: Double,
+    val uploadMbps: Double,
+    val pingMs: Double,
+    val jitterMs: Double,
+    val serverSummary: String = "Cloudflare Edge",
+    val error: String? = null
+) {
+    val verdictTitle: String
+        get() = when {
+            error != null -> "Speed test incomplete"
+            downloadMbps >= 100.0 -> "Very fast connection"
+            downloadMbps >= 25.0 -> "Good everyday connection"
+            downloadMbps >= 10.0 -> "Moderate connection"
+            else -> "Slow connection"
+        }
+
+    val verdictDetail: String
+        get() = when {
+            error != null -> error
+            downloadMbps >= 100.0 -> "Ready for 4K streaming, Meta Quest VR streaming, and large downloads."
+            downloadMbps >= 25.0 -> "Smooth for HD video, calls, and everyday browsing."
+            downloadMbps >= 10.0 -> "Fine for browsing and standard video; large downloads will take longer."
+            else -> "Video calls or large downloads may stutter. Checking your Wi-Fi or VPN route may help."
+        }
+}
+
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState

@@ -11,6 +11,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.morad.housekeepermini.BuildConfig
 import com.morad.housekeepermini.model.RouteProbeResult
+import com.morad.housekeepermini.model.SpeedTestResult
 import com.morad.housekeepermini.model.TrackedRepoApp
 import com.morad.housekeepermini.model.UpdateState
 import org.json.JSONArray
@@ -22,6 +23,7 @@ import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URL
+import kotlin.math.abs
 
 data class NetworkSummary(
     val connected: Boolean,
@@ -87,6 +89,140 @@ object NetworkAndUpdateEngine {
         }
 
         return results
+    }
+
+    fun runSpeedTest(
+        onProgress: (phase: String, dlMbps: Double?, ulMbps: Double?, pingMs: Double?, jitterMs: Double?) -> Unit
+    ): SpeedTestResult {
+        var finalPing = 0.0
+        var finalJitter = 0.0
+        var finalDownload = 0.0
+        var finalUpload = 0.0
+        return try {
+            // 1. Ping & jitter (5 lightweight requests)
+            onProgress("Measuring ping and jitter…", null, null, null, null)
+            val rtts = mutableListOf<Double>()
+            for (i in 0 until 5) {
+                val t0 = System.nanoTime()
+                val conn = (URL("https://speed.cloudflare.com/__down?bytes=0").openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    useCaches = false
+                    requestMethod = "GET"
+                }
+                val code = conn.responseCode
+                conn.inputStream.use { it.readBytes() }
+                conn.disconnect()
+                val ms = (System.nanoTime() - t0) / 1_000_000.0
+                if (code in 200..399) {
+                    rtts.add(ms)
+                    finalPing = median(rtts)
+                    finalJitter = jitter(rtts)
+                    onProgress("Measuring ping and jitter…", null, null, finalPing, finalJitter)
+                }
+            }
+            if (rtts.isEmpty()) {
+                return SpeedTestResult(0.0, 0.0, 0.0, 0.0, error = "Could not reach speed test server. Check your internet or VPN.")
+            }
+
+            // 2. Streaming download (15 MB cap or 8 seconds max)
+            onProgress("Testing download speed…", 0.0, null, finalPing, finalJitter)
+            val downConn = (URL("https://speed.cloudflare.com/__down?bytes=15728640").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 10000
+                useCaches = false
+            }
+            val downStart = System.nanoTime()
+            var lastUiNs = downStart
+            var totalDownBytes = 0L
+            downConn.inputStream.use { input ->
+                val buf = ByteArray(16 * 1024)
+                var read = input.read(buf)
+                while (read != -1) {
+                    totalDownBytes += read
+                    val now = System.nanoTime()
+                    val elapsedSec = (now - downStart) / 1_000_000_000.0
+                    if ((now - lastUiNs) >= 180_000_000L && elapsedSec > 0.05) {
+                        lastUiNs = now
+                        finalDownload = (totalDownBytes * 8.0) / (elapsedSec * 1_000_000.0)
+                        onProgress("Testing download speed…", finalDownload, null, finalPing, finalJitter)
+                    }
+                    if (elapsedSec >= 8.0) break
+                    read = input.read(buf)
+                }
+            }
+            downConn.disconnect()
+            val downElapsed = ((System.nanoTime() - downStart) / 1_000_000_000.0).coerceAtLeast(0.05)
+            finalDownload = (totalDownBytes * 8.0) / (downElapsed * 1_000_000.0)
+            onProgress("Testing upload speed…", finalDownload, 0.0, finalPing, finalJitter)
+
+            // 3. Timed upload (3 MB payload)
+            val uploadBytes = 3 * 1024 * 1024
+            val upConn = (URL("https://speed.cloudflare.com/__up").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 12000
+                doOutput = true
+                requestMethod = "POST"
+                setFixedLengthStreamingMode(uploadBytes)
+                setRequestProperty("Content-Type", "application/octet-stream")
+            }
+            val upStart = System.nanoTime()
+            var lastUpUiNs = upStart
+            upConn.outputStream.use { out ->
+                val chunk = ByteArray(32 * 1024) { 0x5A }
+                var sent = 0
+                while (sent < uploadBytes) {
+                    val toWrite = minOf(chunk.size, uploadBytes - sent)
+                    out.write(chunk, 0, toWrite)
+                    sent += toWrite
+                    val now = System.nanoTime()
+                    val elapsedSec = (now - upStart) / 1_000_000_000.0
+                    if ((now - lastUpUiNs) >= 180_000_000L && elapsedSec > 0.05) {
+                        lastUpUiNs = now
+                        finalUpload = (sent * 8.0) / (elapsedSec * 1_000_000.0)
+                        onProgress("Testing upload speed…", finalDownload, finalUpload, finalPing, finalJitter)
+                    }
+                }
+                out.flush()
+            }
+            val upCode = upConn.responseCode
+            upConn.disconnect()
+            val upElapsed = ((System.nanoTime() - upStart) / 1_000_000_000.0).coerceAtLeast(0.05)
+            if (upCode in 200..399) {
+                finalUpload = (uploadBytes * 8.0) / (upElapsed * 1_000_000.0)
+            }
+
+            SpeedTestResult(
+                downloadMbps = finalDownload,
+                uploadMbps = finalUpload,
+                pingMs = finalPing,
+                jitterMs = finalJitter
+            )
+        } catch (e: Exception) {
+            SpeedTestResult(
+                downloadMbps = finalDownload,
+                uploadMbps = finalUpload,
+                pingMs = finalPing,
+                jitterMs = finalJitter,
+                error = e.localizedMessage ?: "Speed test timed out or connection dropped."
+            )
+        }
+    }
+
+    internal fun median(values: List<Double>): Double {
+        if (values.isEmpty()) return 0.0
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 0) (sorted[mid - 1] + sorted[mid]) / 2.0 else sorted[mid]
+    }
+
+    internal fun jitter(values: List<Double>): Double {
+        if (values.size < 2) return 0.0
+        var sum = 0.0
+        for (i in 1 until values.size) {
+            sum += abs(values[i] - values[i - 1])
+        }
+        return sum / (values.size - 1)
     }
 
     private fun probeHttp(name: String, targetUrl: String): RouteProbeResult {

@@ -9,14 +9,13 @@
   - **"Made by Morad"** in the Home header, NavigationRail, and About/Updates card.
   - **Self-Updater + Obtainium-style GitHub App Updater:** Checks GitHub Releases for `aghamorad/Housekeeper-Mini` and any user-added `owner/repo` APK releases.
 
-## Current State (2026-11-19)
-- Built and verified `v0.1.0`:
+## Current State (2026-11-20)
+- Built and verified `v0.2.0` (`versionCode = 2`):
   - `./gradlew testDebugUnitTest assembleRelease` passed (`BUILD SUCCESSFUL`).
-  - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
   - Release APK: `app/build/outputs/apk/release/app-release.apk`
-- Features implemented:
-  1. **Home (`OverviewScreen`):** Device/Quest detection, RAM, Internal Storage, Battery & Thermal vitals, quick links.
-  2. **Storage (`StorageScreen`):** Leftover APKs, Large Files (>25 MB), Old Downloads (30+ days), Duplicate Files (SHA-256), `Select Safe`, and confirmed removal.
-  3. **Apps (`AppsScreen`):** Installed user apps with App/Data/Cache size (`StorageStatsManager`), last-used tracking (`UsageStatsManager`), 1-tap App Storage/Cache screen, APK backup to `Downloads/HousekeeperMini-Backups`, and Uninstall.
-  4. **Privacy (`PrivacyScreen`):** Audits apps holding Camera, Microphone, Precise Location, Contacts, Install Apps, and Draw Over Apps permissions.
-  5. **Network & Updates (`NetworkScreen`):** Wi-Fi/IP/DNS info, route & LAN reachability probe (e.g. PS5 `192.168.1.81:8081` or Mac MLX), self-updater, and Obtainium-style GitHub APK App Updater.
+- Features & Updates in `v0.2.0` (aligned with macOS **Housekeeper 0.30.1**):
+  1. **Signature Burgundy Theme (`Theme.kt`):** Warm oxblood/burgundy Dark Mode (`#260C10` background, `#331D21` surface, `#EAB19E` accent, `#97393A` primary container) and warm parchment-burgundy Light Mode (`#F9F4F1` background, `#FFFCFA` surface, `#9E2F27` primary).
+  2. **Liquid Glass Octopus Icon & In-App Mascot:** Generated multi-density `ic_launcher.png` / `ic_launcher_round.png` (`mdpi`–`xxxhdpi`), `drawable-nodpi/mascot_octopus.png`, and pearlescent Liquid Glass adaptive icon (`ic_launcher_bg.xml` + `ic_launcher_fg.xml`) directly from macOS Housekeeper's canonical Liquid Glass icon and `mascot.png`; added interactive octopus mascot in `OverviewScreen` and `NavigationRail`.
+  3. **Zero-Idle-Drain UI Magic:** Event-driven `AnimatedContent` tab transitions, spring-animated RAM & Storage progress bars, tap-bounce octopus mascot, and an event-driven `SpeedArcGauge` in `NetworkScreen` (zero background timers).
+  4. **Built-In Live Speed Test (`NetworkAndUpdateEngine.kt`, `Screens.kt`):** Live Cloudflare Edge streaming Download (Mbps), Upload (Mbps), 5-sample median Ping & Jitter (ms), sweeping burgundy arc gauge, and plain-English connection quality verdict.
+  5. **Home, Storage, Apps, Privacy & Self-Updater:** All core phone & Meta Quest maintenance screens and Obtainium-style GitHub APK updater preserved.

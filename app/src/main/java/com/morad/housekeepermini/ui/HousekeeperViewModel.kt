@@ -13,6 +13,7 @@ import com.morad.housekeepermini.model.DeviceVitals
 import com.morad.housekeepermini.model.NavTab
 import com.morad.housekeepermini.model.PrivacyFinding
 import com.morad.housekeepermini.model.RouteProbeResult
+import com.morad.housekeepermini.model.SpeedTestResult
 import com.morad.housekeepermini.model.StorageCategory
 import com.morad.housekeepermini.model.StorageItem
 import com.morad.housekeepermini.model.TrackedRepoApp
@@ -39,6 +40,13 @@ data class HousekeeperUiState(
     val customLanHost: String = "192.168.1.81:8081",
     val isProbingRoutes: Boolean = false,
     val routeResults: List<RouteProbeResult> = emptyList(),
+    val isRunningSpeedTest: Boolean = false,
+    val speedTestPhase: String = "Ready to test",
+    val liveDownloadMbps: Double? = null,
+    val liveUploadMbps: Double? = null,
+    val livePingMs: Double? = null,
+    val liveJitterMs: Double? = null,
+    val latestSpeedTest: SpeedTestResult? = null,
     val updateState: UpdateState = UpdateState.Idle,
     val trackedApps: List<TrackedRepoApp> = emptyList(),
     val isCheckingTrackedApps: Boolean = false,
@@ -199,6 +207,44 @@ class HousekeeperViewModel(application: Application) : AndroidViewModel(applicat
 
     fun setCustomLanHost(value: String) {
         _ui.update { it.copy(customLanHost = value) }
+    }
+
+    fun runSpeedTest() {
+        if (_ui.value.isRunningSpeedTest) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update {
+                it.copy(
+                    isRunningSpeedTest = true,
+                    speedTestPhase = "Starting speed test…",
+                    liveDownloadMbps = null,
+                    liveUploadMbps = null,
+                    livePingMs = null,
+                    liveJitterMs = null
+                )
+            }
+            val result = NetworkAndUpdateEngine.runSpeedTest { phase, dl, ul, ping, jitter ->
+                _ui.update { state ->
+                    state.copy(
+                        speedTestPhase = phase,
+                        liveDownloadMbps = dl ?: state.liveDownloadMbps,
+                        liveUploadMbps = ul ?: state.liveUploadMbps,
+                        livePingMs = ping ?: state.livePingMs,
+                        liveJitterMs = jitter ?: state.liveJitterMs
+                    )
+                }
+            }
+            _ui.update {
+                it.copy(
+                    isRunningSpeedTest = false,
+                    speedTestPhase = if (result.error == null) "Test complete" else result.error,
+                    liveDownloadMbps = result.downloadMbps,
+                    liveUploadMbps = result.uploadMbps,
+                    livePingMs = result.pingMs,
+                    liveJitterMs = result.jitterMs,
+                    latestSpeedTest = result
+                )
+            }
+        }
     }
 
     fun runRouteSweep() {

@@ -1,6 +1,13 @@
 package com.morad.housekeepermini.ui
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,6 +29,7 @@ import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
@@ -46,11 +55,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.morad.housekeepermini.BuildConfig
+import com.morad.housekeepermini.R
 import com.morad.housekeepermini.engine.AppsAndPrivacyEngine
 import com.morad.housekeepermini.engine.StorageScannerEngine
 import com.morad.housekeepermini.model.NavTab
@@ -58,6 +72,8 @@ import com.morad.housekeepermini.model.StorageCategory
 import com.morad.housekeepermini.model.UpdateState
 import com.morad.housekeepermini.model.formatBytes
 import com.morad.housekeepermini.model.formatLastUsed
+import java.util.Locale
+import kotlin.math.log10
 
 @Composable
 fun OverviewScreen(
@@ -67,6 +83,22 @@ fun OverviewScreen(
 ) {
     val context = LocalContext.current
     val v = state.vitals
+    var mascotTapped by remember { mutableStateOf(false) }
+    val mascotScale by animateFloatAsState(
+        targetValue = if (mascotTapped) 1.09f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "MascotScale"
+    )
+    val animatedRamProgress by animateFloatAsState(
+        targetValue = v.ramProgress,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        label = "RamProgress"
+    )
+    val animatedStorageProgress by animateFloatAsState(
+        targetValue = v.storageProgress,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        label = "StorageProgress"
+    )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -85,6 +117,19 @@ fun OverviewScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.mascot_octopus),
+                            contentDescription = "Housekeeper Octopus",
+                            modifier = Modifier
+                                .size(54.dp)
+                                .graphicsLayer(
+                                    scaleX = mascotScale,
+                                    scaleY = mascotScale,
+                                    rotationZ = if (mascotTapped) -5f else 0f
+                                )
+                                .clickable { mascotTapped = !mascotTapped }
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = v.deviceName.ifBlank { "Android Device" },
@@ -127,7 +172,7 @@ fun OverviewScreen(
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     LinearProgressIndicator(
-                        progress = { v.ramProgress },
+                        progress = { animatedRamProgress },
                         modifier = Modifier.fillMaxWidth().height(10.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -149,7 +194,7 @@ fun OverviewScreen(
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     LinearProgressIndicator(
-                        progress = { v.storageProgress },
+                        progress = { animatedStorageProgress },
                         modifier = Modifier.fillMaxWidth().height(10.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -202,6 +247,12 @@ fun OverviewScreen(
                     onClick = { onNavigate(NavTab.PRIVACY) }
                 ) {
                     Text("Privacy (${state.privacyFindings.size})")
+                }
+                FilledTonalButton(
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    onClick = { onNavigate(NavTab.NETWORK) }
+                ) {
+                    Text("Speed Test")
                 }
             }
         }
@@ -568,6 +619,7 @@ fun PrivacyScreen(
 @Composable
 fun NetworkScreen(
     state: HousekeeperUiState,
+    onRunSpeedTest: () -> Unit,
     onCustomHostChange: (String) -> Unit,
     onRunSweep: () -> Unit,
     onCheckUpdates: () -> Unit,
@@ -629,6 +681,90 @@ fun NetworkScreen(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        item {
+            val gaugeMbps = state.liveDownloadMbps ?: state.latestSpeedTest?.downloadMbps ?: 0.0
+            Card {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Speed, contentDescription = null)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Speed Test", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    state.speedTestPhase,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Button(
+                            onClick = onRunSpeedTest,
+                            enabled = !state.isRunningSpeedTest
+                        ) {
+                            Text(if (state.isRunningSpeedTest) "Testing…" else "Run Speed Test")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        SpeedArcGauge(
+                            mbps = gaugeMbps,
+                            modifier = Modifier.size(128.dp)
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "↓ Download: ${formatMbps(state.liveDownloadMbps ?: state.latestSpeedTest?.downloadMbps)}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "↑ Upload: ${formatMbps(state.liveUploadMbps ?: state.latestSpeedTest?.uploadMbps)}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            val pingVal = state.livePingMs ?: state.latestSpeedTest?.pingMs
+                            val jitterVal = state.liveJitterMs ?: state.latestSpeedTest?.jitterMs
+                            Text(
+                                text = "Ping: ${pingVal?.let { String.format(Locale.US, "%.0f ms", it) } ?: "—"}" +
+                                    (jitterVal?.let { String.format(Locale.US, " • Jitter: %.1f ms", it) } ?: ""),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    val latest = state.latestSpeedTest
+                    if (latest != null && !state.isRunningSpeedTest) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = latest.verdictTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (latest.error == null) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = latest.verdictDetail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Card {
                 Column(modifier = Modifier.padding(20.dp)) {
@@ -799,6 +935,70 @@ fun NetworkScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+private fun formatMbps(value: Double?): String {
+    if (value == null) return "—"
+    return if (value >= 100.0) {
+        String.format(Locale.US, "%.0f Mbps", value)
+    } else {
+        String.format(Locale.US, "%.1f Mbps", value)
+    }
+}
+
+@Composable
+private fun SpeedArcGauge(
+    mbps: Double,
+    modifier: Modifier = Modifier
+) {
+    val targetFraction = if (mbps <= 0.0) {
+        0f
+    } else {
+        val capped = mbps.coerceAtMost(1000.0)
+        (log10(1.0 + capped) / log10(1001.0)).toFloat().coerceIn(0f, 1f)
+    }
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+        label = "SpeedGaugeSweep"
+    )
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    val activeColor = MaterialTheme.colorScheme.primary
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+            val stroke = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
+            drawArc(
+                color = trackColor,
+                startAngle = 140f,
+                sweepAngle = 260f,
+                useCenter = false,
+                style = stroke
+            )
+            drawArc(
+                color = activeColor,
+                startAngle = 140f,
+                sweepAngle = 260f * animatedFraction,
+                useCenter = false,
+                style = stroke
+            )
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = if (mbps > 0.0) {
+                    if (mbps >= 100.0) String.format(Locale.US, "%.0f", mbps)
+                    else String.format(Locale.US, "%.1f", mbps)
+                } else "—",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Mbps",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
