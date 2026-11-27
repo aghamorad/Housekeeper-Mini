@@ -89,6 +89,7 @@ class HousekeeperViewModel(application: Application) : AndroidViewModel(applicat
             )
         }
         refreshAll()
+        checkForUpdates()
     }
 
     fun selectTab(tab: NavTab) {

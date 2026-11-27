@@ -20,6 +20,8 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -30,10 +32,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -46,11 +51,41 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.morad.housekeepermini.R
 import com.morad.housekeepermini.model.NavTab
+import com.morad.housekeepermini.model.UpdateState
 
 @Composable
 fun HousekeeperApp(vm: HousekeeperViewModel = viewModel()) {
     val state by vm.ui.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var dismissedUpdateVersion by remember { mutableStateOf<String?>(null) }
+
+    val availableUpdate = state.updateState as? UpdateState.Available
+    if (availableUpdate != null && dismissedUpdateVersion != availableUpdate.version) {
+        AlertDialog(
+            onDismissRequest = { dismissedUpdateVersion = availableUpdate.version },
+            title = { Text("Update Available (${availableUpdate.version})") },
+            text = {
+                Text(
+                    availableUpdate.notes.ifBlank {
+                        "A newer version of Housekeeper Mini is ready to download and install."
+                    }.take(360)
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    dismissedUpdateVersion = availableUpdate.version
+                    vm.installUpdate(availableUpdate.apkUrl)
+                }) {
+                    Text("Update Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dismissedUpdateVersion = availableUpdate.version }) {
+                    Text("Later")
+                }
+            }
+        )
+    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         vm.refreshVitals()
