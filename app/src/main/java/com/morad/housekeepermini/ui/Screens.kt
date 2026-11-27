@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import com.morad.housekeepermini.BuildConfig
 import com.morad.housekeepermini.R
 import com.morad.housekeepermini.engine.AppsAndPrivacyEngine
+import com.morad.housekeepermini.engine.CloudflareVpnEngine
 import com.morad.housekeepermini.engine.StorageScannerEngine
 import com.morad.housekeepermini.model.NavTab
 import com.morad.housekeepermini.model.StorageCategory
@@ -626,8 +627,22 @@ fun NetworkScreen(
     onInstallUpdate: (String) -> Unit,
     onAddTrackedApp: (String, String) -> Unit,
     onRemoveTrackedApp: (String) -> Unit,
-    onCheckAllTrackedApps: () -> Unit
+    onCheckAllTrackedApps: () -> Unit,
+    onCfTokenChange: (String) -> Unit,
+    onVerifyCfToken: () -> Unit,
+    onForgetCfToken: () -> Unit,
+    onDeleteCfWorker: (String) -> Unit,
+    onCfWorkerHostChange: (String) -> Unit,
+    onRegenerateCfUuid: () -> Unit,
+    onScanCleanIps: () -> Unit,
+    onWarpEndpointChange: (String) -> Unit,
+    onWarpHeavyJunkChange: (Boolean) -> Unit,
+    onGenerateWarp: () -> Unit,
+    onNotify: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    var cfSubTab by remember { mutableStateOf(0) } // 0 = AmneziaWG WARP, 1 = Token & Clean IPs
     var showAddRepoDialog by remember { mutableStateOf(false) }
     var repoInput by remember { mutableStateOf("") }
     var packageInput by remember { mutableStateOf("") }
@@ -681,6 +696,236 @@ fun NetworkScreen(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        item {
+            Card {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Security, contentDescription = null)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Cloudflare Clean VPN", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Free AmneziaWG WARP configs or Clean Cloudflare IP VLESS scanner",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = cfSubTab == 0,
+                            onClick = { cfSubTab = 0 },
+                            label = { Text("AmneziaWG WARP (Free)") }
+                        )
+                        FilterChip(
+                            selected = cfSubTab == 1,
+                            onClick = { cfSubTab = 1 },
+                            label = { Text("Token & Clean IPs") }
+                        )
+                    }
+
+                    if (cfSubTab == 0) {
+                        Text(
+                            "No Cloudflare account or token needed — zero Worker abuse-flag risk. Generates fresh Curve25519 keys, registers with WARP, and adds AmneziaWG junk packets.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = !state.warpHeavyJunk,
+                                onClick = { onWarpHeavyJunkChange(false) },
+                                label = { Text("Light Junk") }
+                            )
+                            FilterChip(
+                                selected = state.warpHeavyJunk,
+                                onClick = { onWarpHeavyJunkChange(true) },
+                                label = { Text("Heavy Junk") }
+                            )
+                            OutlinedButton(onClick = {
+                                val list = CloudflareVpnEngine.warpEndpoints
+                                val nextIdx = (list.indexOf(state.warpEndpoint) + 1) % list.size
+                                onWarpEndpointChange(list[nextIdx])
+                            }) {
+                                Text("Next IP")
+                            }
+                        }
+                        Text(
+                            "Endpoint: ${state.warpEndpoint}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = onGenerateWarp,
+                            enabled = !state.warpIsGenerating,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (state.warpIsGenerating) "Generating & Registering…" else "Generate Fresh WARP Config")
+                        }
+                        if (state.warpStatus.isNotBlank()) {
+                            Text(state.warpStatus, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (state.warpConfigText.isNotBlank()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        CloudflareVpnEngine.copyToClipboard(context, "AmneziaWG WARP", state.warpConfigText)
+                                        onNotify("Copied AmneziaWG WARP config. Paste into AmneziaVPN.")
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Copy Config")
+                                }
+                                FilledTonalButton(
+                                    onClick = {
+                                        CloudflareVpnEngine.shareText(context, "AmneziaWG WARP Config", state.warpConfigText)
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Share to VPN App")
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            "1. Tap Open Token Page → Create Token → 'Edit Cloudflare Workers' template.\n2. Paste token below and tap Verify.\n3. Turn VPN off and scan Clean IPs on your mobile data or Wi-Fi.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = state.cfTokenInput,
+                            onValueChange = onCfTokenChange,
+                            label = { Text("Cloudflare API Token (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { uriHandler.openUri("https://dash.cloudflare.com/profile/api-tokens") }) {
+                                Text("Open Token Page")
+                            }
+                            Button(
+                                onClick = onVerifyCfToken,
+                                enabled = !state.cfIsVerifying
+                            ) {
+                                Text(if (state.cfIsVerifying) "Checking…" else "Verify")
+                            }
+                            if (state.cfHasSavedToken) {
+                                TextButton(onClick = onForgetCfToken) {
+                                    Text("Forget", color = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                        }
+
+                        state.cfAccount?.let { acc ->
+                            Text(
+                                "Connected: ${acc.accountName}" + (acc.subdomain?.let { " ($it.workers.dev)" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                            acc.workers.take(5).forEach { w ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(w, style = MaterialTheme.typography.bodySmall)
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (!acc.subdomain.isNullOrBlank()) {
+                                            TextButton(onClick = { onCfWorkerHostChange("$w.${acc.subdomain}.workers.dev") }) {
+                                                Text("Use")
+                                            }
+                                        }
+                                        TextButton(onClick = { onDeleteCfWorker(w) }) {
+                                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = state.cfWorkerHost,
+                            onValueChange = onCfWorkerHostChange,
+                            label = { Text("Worker / Pages Hostname") },
+                            placeholder = { Text("my-notes-42.example.workers.dev") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "UUID: ${state.cfWorkerUuid.take(18)}…",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedButton(onClick = onRegenerateCfUuid) {
+                                Text("New UUID")
+                            }
+                        }
+
+                        Button(
+                            onClick = onScanCleanIps,
+                            enabled = !state.cfIsScanningIps,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (state.cfIsScanningIps) "Scanning Clean IPs…" else "Scan Clean Cloudflare IPs (VPN Off)")
+                        }
+
+                        if (state.cfScanStatus.isNotBlank()) {
+                            Text(state.cfScanStatus, style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        if (state.cfCleanIps.isNotEmpty()) {
+                            val hasHost = state.cfWorkerHost.isNotBlank()
+                            state.cfCleanIps.take(8).forEach { item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.ip, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "${item.latencyMs} ms • ${item.qualityLabel}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        FilledTonalButton(onClick = {
+                                            if (hasHost) {
+                                                val link = CloudflareVpnEngine.buildVlessLink(
+                                                    state.cfWorkerHost, state.cfWorkerUuid, item.ip, 443, "HK-${item.ip}-${item.latencyMs}ms"
+                                                )
+                                                CloudflareVpnEngine.copyToClipboard(context, "VLESS", link)
+                                                onNotify("Copied VLESS link for ${item.ip}.")
+                                            } else {
+                                                CloudflareVpnEngine.copyToClipboard(context, "Clean IP", item.ip)
+                                                onNotify("Copied clean IP ${item.ip}.")
+                                            }
+                                        }) {
+                                            Text(if (hasHost) "Copy VLESS" else "Copy IP")
+                                        }
+                                        if (hasHost) {
+                                            OutlinedButton(onClick = {
+                                                val link = CloudflareVpnEngine.buildVlessLink(
+                                                    state.cfWorkerHost, state.cfWorkerUuid, item.ip, 443, "HK-${item.ip}-${item.latencyMs}ms"
+                                                )
+                                                CloudflareVpnEngine.shareText(context, "VLESS Config (${item.ip})", link)
+                                            }) {
+                                                Text("Share")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             val gaugeMbps = state.liveDownloadMbps ?: state.latestSpeedTest?.downloadMbps ?: 0.0
             Card {

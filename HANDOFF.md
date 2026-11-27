@@ -9,7 +9,15 @@
   - **"Made by Morad"** in the Home header, NavigationRail, and About/Updates card.
   - **Self-Updater + Obtainium-style GitHub App Updater:** Checks GitHub Releases for `aghamorad/Housekeeper-Mini` and any user-added `owner/repo` APK releases.
 
-## Current State (2026-11-20)
+## Current State (2026-11-27)
+- Built and verified `v0.3.0` (`versionCode = 3`) with JDK 17 (`JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home ./gradlew testDebugUnitTest assembleRelease`):
+  - Release APK: `app/build/outputs/apk/release/app-release.apk`
+  - Added **Cloudflare Clean VPN** (`CloudflareVpnEngine.kt`, `NetworkScreen`, `HousekeeperViewModel.kt`, `CloudflareVpnEngineTest.kt`):
+    1. **AmneziaWG WARP (Free, zero account / zero Worker abuse-flag risk):** Pure Kotlin RFC 7748 X25519 keypair generator, live Cloudflare WARP registration (`api.cloudflareclient.com/v0a4005/reg`), Light/Heavy junk packets, curated WARP endpoints, 1-tap Copy & Android Share Sheet to AmneziaVPN.
+    2. **Cloudflare API Token & Clean IP Scanner:** Guided 3-step token setup, token verification + account/workers discovery + 1-tap Delete Worker, concurrent Cloudflare IPv4 TLS latency scanner, `vless://` link builder with Clean IP as address and Worker/Pages host as SNI/Host, and 1-tap Copy/Share to v2rayNG / Hiddify / MahsaNG.
+  - All prior `v0.2.0` features preserved (Signature Burgundy theme, Liquid Glass octopus icon, Speed Test, Storage/Apps/Privacy, Obtainium-style GitHub APK updater).
+
+## Previous State (2026-11-20)
 - Built and verified `v0.2.0` (`versionCode = 2`):
   - `./gradlew testDebugUnitTest assembleRelease` passed (`BUILD SUCCESSFUL`).
   - Release APK: `app/build/outputs/apk/release/app-release.apk`

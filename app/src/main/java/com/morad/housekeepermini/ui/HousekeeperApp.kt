@@ -159,7 +159,18 @@ fun HousekeeperApp(vm: HousekeeperViewModel = viewModel()) {
                                 onInstallUpdate = vm::installUpdate,
                                 onAddTrackedApp = vm::addTrackedApp,
                                 onRemoveTrackedApp = vm::removeTrackedApp,
-                                onCheckAllTrackedApps = vm::checkAllTrackedApps
+                                onCheckAllTrackedApps = vm::checkAllTrackedApps,
+                                onCfTokenChange = vm::setCfToken,
+                                onVerifyCfToken = vm::verifyCfToken,
+                                onForgetCfToken = vm::forgetCfToken,
+                                onDeleteCfWorker = vm::deleteCfWorker,
+                                onCfWorkerHostChange = vm::setCfWorkerHost,
+                                onRegenerateCfUuid = vm::regenerateCfUuid,
+                                onScanCleanIps = vm::scanCleanIps,
+                                onWarpEndpointChange = vm::setWarpEndpoint,
+                                onWarpHeavyJunkChange = vm::setWarpHeavyJunk,
+                                onGenerateWarp = vm::generateWarpConfig,
+                                onNotify = vm::showBanner
                             )
                         }
                     }

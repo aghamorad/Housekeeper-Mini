@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.morad.housekeepermini.engine.AppsAndPrivacyEngine
+import com.morad.housekeepermini.engine.CfAccountInfo
+import com.morad.housekeepermini.engine.CfCleanIpResult
+import com.morad.housekeepermini.engine.CloudflareVpnEngine
 import com.morad.housekeepermini.engine.DeviceVitalsEngine
 import com.morad.housekeepermini.engine.NetworkAndUpdateEngine
 import com.morad.housekeepermini.engine.NetworkSummary
@@ -50,6 +53,20 @@ data class HousekeeperUiState(
     val updateState: UpdateState = UpdateState.Idle,
     val trackedApps: List<TrackedRepoApp> = emptyList(),
     val isCheckingTrackedApps: Boolean = false,
+    val cfTokenInput: String = "",
+    val cfHasSavedToken: Boolean = false,
+    val cfIsVerifying: Boolean = false,
+    val cfAccount: CfAccountInfo? = null,
+    val cfWorkerHost: String = "",
+    val cfWorkerUuid: String = "",
+    val cfIsScanningIps: Boolean = false,
+    val cfScanStatus: String = "",
+    val cfCleanIps: List<CfCleanIpResult> = emptyList(),
+    val warpEndpoint: String = CloudflareVpnEngine.warpEndpoints.first(),
+    val warpHeavyJunk: Boolean = false,
+    val warpIsGenerating: Boolean = false,
+    val warpConfigText: String = "",
+    val warpStatus: String = "",
     val statusBanner: String? = null
 )
 
@@ -59,6 +76,18 @@ class HousekeeperViewModel(application: Application) : AndroidViewModel(applicat
     val ui: StateFlow<HousekeeperUiState> = _ui.asStateFlow()
 
     init {
+        val ctx = getApplication<Application>()
+        val savedToken = CloudflareVpnEngine.loadSavedToken(ctx)
+        val savedHost = CloudflareVpnEngine.loadWorkerHost(ctx)
+        val savedUuid = CloudflareVpnEngine.loadOrCreateUuid(ctx)
+        _ui.update {
+            it.copy(
+                cfTokenInput = savedToken,
+                cfHasSavedToken = savedToken.isNotBlank(),
+                cfWorkerHost = savedHost,
+                cfWorkerUuid = savedUuid
+            )
+        }
         refreshAll()
     }
 
@@ -343,5 +372,163 @@ class HousekeeperViewModel(application: Application) : AndroidViewModel(applicat
                 )
             }
         }
+    }
+
+    // MARK: - Cloudflare Clean VPN & AmneziaWG WARP
+
+    fun setCfToken(value: String) {
+        _ui.update { it.copy(cfTokenInput = value) }
+    }
+
+    fun verifyCfToken() {
+        val ctx = getApplication<Application>()
+        val raw = _ui.value.cfTokenInput
+        if (_ui.value.cfIsVerifying) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(cfIsVerifying = true) }
+            val result = CloudflareVpnEngine.verifyToken(raw)
+            result.fold(
+                onSuccess = { info ->
+                    val cleaned = CloudflareVpnEngine.sanitizeToken(raw)
+                    CloudflareVpnEngine.saveToken(ctx, cleaned)
+                    val autoHost = if (_ui.value.cfWorkerHost.isBlank() && info.workers.isNotEmpty() && !info.subdomain.isNullOrBlank()) {
+                        "${info.workers.first()}.${info.subdomain}.workers.dev".also {
+                            CloudflareVpnEngine.saveWorkerHost(ctx, it)
+                        }
+                    } else {
+                        _ui.value.cfWorkerHost
+                    }
+                    _ui.update {
+                        it.copy(
+                            cfIsVerifying = false,
+                            cfTokenInput = cleaned,
+                            cfHasSavedToken = true,
+                            cfAccount = info,
+                            cfWorkerHost = autoHost,
+                            statusBanner = "Connected to ${info.accountName}"
+                        )
+                    }
+                },
+                onFailure = { err ->
+                    _ui.update {
+                        it.copy(
+                            cfIsVerifying = false,
+                            statusBanner = err.localizedMessage ?: "Could not verify Cloudflare token."
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    fun forgetCfToken() {
+        CloudflareVpnEngine.forgetToken(getApplication())
+        _ui.update {
+            it.copy(
+                cfTokenInput = "",
+                cfHasSavedToken = false,
+                cfAccount = null,
+                statusBanner = "Cloudflare token removed."
+            )
+        }
+    }
+
+    fun deleteCfWorker(name: String) {
+        val acc = _ui.value.cfAccount ?: return
+        val token = _ui.value.cfTokenInput
+        viewModelScope.launch(Dispatchers.IO) {
+            val res = CloudflareVpnEngine.deleteWorker(acc.accountId, token, name)
+            res.fold(
+                onSuccess = { msg ->
+                    _ui.update { state ->
+                        val nextWorkers = state.cfAccount?.workers?.filterNot { it == name } ?: emptyList()
+                        state.copy(
+                            cfAccount = state.cfAccount?.copy(workers = nextWorkers),
+                            statusBanner = msg
+                        )
+                    }
+                },
+                onFailure = { err ->
+                    _ui.update { it.copy(statusBanner = err.localizedMessage ?: "Delete failed.") }
+                }
+            )
+        }
+    }
+
+    fun setCfWorkerHost(host: String) {
+        CloudflareVpnEngine.saveWorkerHost(getApplication(), host)
+        _ui.update { it.copy(cfWorkerHost = host) }
+    }
+
+    fun regenerateCfUuid() {
+        val fresh = java.util.UUID.randomUUID().toString().lowercase(java.util.Locale.US)
+        CloudflareVpnEngine.saveUuid(getApplication(), fresh)
+        _ui.update { it.copy(cfWorkerUuid = fresh, statusBanner = "Generated a fresh UUID.") }
+    }
+
+    fun scanCleanIps() {
+        if (_ui.value.cfIsScanningIps) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update {
+                it.copy(
+                    cfIsScanningIps = true,
+                    cfCleanIps = emptyList(),
+                    cfScanStatus = "Scanning 24 Cloudflare IPv4 edge addresses…"
+                )
+            }
+            val found = CloudflareVpnEngine.scanCleanIps(count = 24, port = 443) { tested, total, cleanSoFar ->
+                _ui.update {
+                    it.copy(
+                        cfCleanIps = cleanSoFar,
+                        cfScanStatus = "Tested $tested/$total IPs • ${cleanSoFar.size} clean found"
+                    )
+                }
+            }
+            _ui.update {
+                it.copy(
+                    cfIsScanningIps = false,
+                    cfCleanIps = found,
+                    cfScanStatus = if (found.isEmpty()) {
+                        "No clean IPs responded. Turn VPN off and try again, or use AmneziaWG WARP."
+                    } else {
+                        "Found ${found.size} clean IPs. Fastest: ${found.first().ip} (${found.first().latencyMs} ms)."
+                    }
+                )
+            }
+        }
+    }
+
+    fun setWarpEndpoint(endpoint: String) {
+        _ui.update { it.copy(warpEndpoint = endpoint) }
+    }
+
+    fun setWarpHeavyJunk(heavy: Boolean) {
+        _ui.update { it.copy(warpHeavyJunk = heavy) }
+    }
+
+    fun generateWarpConfig() {
+        if (_ui.value.warpIsGenerating) return
+        val endpoint = _ui.value.warpEndpoint
+        val heavy = _ui.value.warpHeavyJunk
+        viewModelScope.launch(Dispatchers.IO) {
+            _ui.update { it.copy(warpIsGenerating = true, warpStatus = "Generating Curve25519 keys & registering with Cloudflare WARP…") }
+            val output = CloudflareVpnEngine.generateAmneziaWarpConfig(
+                endpoint = endpoint,
+                heavyJunk = heavy,
+                registerOnline = true
+            )
+            _ui.update {
+                it.copy(
+                    warpIsGenerating = false,
+                    warpConfigText = output.confText,
+                    warpStatus = output.message,
+                    statusBanner = output.message
+                )
+            }
+        }
+    }
+
+    fun showBanner(msg: String) {
+        _ui.update { it.copy(statusBanner = msg) }
     }
 }
