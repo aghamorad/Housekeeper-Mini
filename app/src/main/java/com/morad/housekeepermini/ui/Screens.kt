@@ -1,8 +1,13 @@
 package com.morad.housekeepermini.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -725,7 +730,15 @@ fun NetworkScreen(
                         )
                     }
 
-                    if (cfSubTab == 0) {
+                    AnimatedContent(
+                        targetState = cfSubTab,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(180)).togetherWith(fadeOut(animationSpec = tween(130)))
+                        },
+                        label = "CfVpnModeTransition"
+                    ) { activeTab ->
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (activeTab == 0) {
                         Text(
                             "No Cloudflare account or token needed — zero Worker abuse-flag risk. Generates fresh Curve25519 keys, registers with WARP, and adds AmneziaWG junk packets.",
                             style = MaterialTheme.typography.bodySmall,
@@ -921,6 +934,8 @@ fun NetworkScreen(
                                 }
                             }
                         }
+                    }
+                    }
                     }
                 }
             }
